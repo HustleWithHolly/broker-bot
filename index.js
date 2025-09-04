@@ -1,4 +1,4 @@
-// Minimal website-facing bot server
+// Diagnostic-friendly bot server
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -8,19 +8,37 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: '*' }));
 
-// 🔎 NEW: quick health check so GET /health returns OK
+// --- health + env checks ---
 app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/env', (req, res) => {
+  res.json({
+    has_OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+    has_ASSISTANT_ID_CLIENT: !!process.env.ASSISTANT_ID_CLIENT,
+    PORT: process.env.PORT || 'not set'
+  });
+});
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazy-create the OpenAI client so the app doesn't crash on boot
+let client;
+function getClient() {
+  if (!client) {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error('Missing OPENAI_API_KEY');
+    client = new OpenAI({ apiKey: key });
+  }
+  return client;
+}
+
+// Simple in-memory session -> thread map
 const sessions = new Map();
 
 app.post('/chat', async (req, res) => {
   try {
-    // 🔎 NEW: log the incoming body so we can see it in Railway logs
     console.log('POST /chat body:', req.body);
-
     const { text, session_id } = req.body;
     if (!text) return res.status(400).json({ error: 'Missing text' });
+
+    const client = getClient(); // will throw if key missing
 
     let threadId = sessions.get(session_id);
     if (!threadId) {
@@ -35,7 +53,6 @@ app.post('/chat', async (req, res) => {
       assistant_id: process.env.ASSISTANT_ID_CLIENT
     });
 
-    // simple polling
     while (true) {
       const r = await client.beta.threads.runs.retrieve(threadId, run.id);
       if (r.status === 'completed') break;
@@ -51,7 +68,7 @@ app.post('/chat', async (req, res) => {
     res.json({ text: reply });
   } catch (err) {
     console.error('ERROR in /chat:', err);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: String(err.message || err) });
   }
 });
 
