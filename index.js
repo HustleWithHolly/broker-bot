@@ -71,7 +71,11 @@ app.post('/chat', async (req, res) => {
     res.status(500).json({ error: String(err.message || err) });
   }
 });
+// Root responds 200 OK so Railway's health check passes
+app.get('/', (req, res) => res.send('OK'));
 
+// (you already have this one in the diagnostic version, keep it)
+app.get('/health', (req, res) => res.json({ ok: true }));
 app.listen(process.env.PORT || 3000, () => {
   console.log('Bot server running on port', process.env.PORT || 3000);
 });
