@@ -70,6 +70,9 @@ app.post('/chat', async (req, res) => {
     console.error('ERROR in /chat:', err);
     res.status(500).json({ error: String(err.message || err) });
   }
+});// Debug: show all environment variable keys (so we can spot typos/whitespace)
+app.get('/env-raw', (req, res) => {
+  res.json({ keys: Object.keys(process.env).sort() });
 });
 // Root responds 200 OK so Railway's health check passes
 app.get('/', (req, res) => res.send('OK'));
